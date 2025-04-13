@@ -36,29 +36,88 @@ def wait_for_cassandra():
 def create_keyspace(session):
     """
     Create the keyspace if it doesn't exist.
-    
-    This is where students will define the keyspace configuration.
     """
     logger.info(f"Creating keyspace {CASSANDRA_KEYSPACE} if it doesn't exist...")
     
-    # TODO: Students should implement keyspace creation
-    # Hint: Consider replication strategy and factor for a distributed database
+    # Create keyspace with SimpleStrategy and replication factor 1
+    # In a production environment, you would use NetworkTopologyStrategy
+    # and configure the replication factor for each datacenter
+    session.execute(f"""
+        CREATE KEYSPACE IF NOT EXISTS {CASSANDRA_KEYSPACE}
+        WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}}
+    """)
     
     logger.info(f"Keyspace {CASSANDRA_KEYSPACE} is ready.")
 
 def create_tables(session):
     """
     Create the tables for the application.
-    
-    This is where students will define the table schemas based on the requirements.
     """
     logger.info("Creating tables...")
     
-    # TODO: Students should implement table creation
-    # Hint: Consider:
-    # - What tables are needed to implement the required APIs?
-    # - What should be the primary keys and clustering columns?
-    # - How will you handle pagination and time-based queries?
+    # Create users table
+    session.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INT,
+            username TEXT,
+            created_at TIMESTAMP,
+            PRIMARY KEY (user_id)
+        )
+    """)
+    
+    # Create conversations table
+    session.execute("""
+        CREATE TABLE IF NOT EXISTS conversations (
+            conversation_id INT,
+            user1_id INT,
+            user2_id INT,
+            last_message_at TIMESTAMP,
+            last_message_content TEXT,
+            PRIMARY KEY (conversation_id)
+        )
+    """)
+    
+    # Create conversations_by_user table
+    session.execute("""
+        CREATE TABLE IF NOT EXISTS conversations_by_user (
+            user_id INT,
+            conversation_id INT,
+            last_message_at TIMESTAMP,
+            user1_id INT,
+            user2_id INT,
+            last_message_content TEXT,
+            PRIMARY KEY (user_id, last_message_at, conversation_id)
+        ) WITH CLUSTERING ORDER BY (last_message_at DESC, conversation_id ASC)
+    """)
+    
+    # Create messages_by_conversation table
+    session.execute("""
+        CREATE TABLE IF NOT EXISTS messages_by_conversation (
+            conversation_id INT,
+            created_at TIMESTAMP,
+            message_id INT,
+            sender_id INT,
+            receiver_id INT,
+            content TEXT,
+            PRIMARY KEY (conversation_id, created_at, message_id)
+        ) WITH CLUSTERING ORDER BY (created_at DESC, message_id ASC)
+    """)
+    
+    # Create counters table for ID generation
+    session.execute("""
+        CREATE TABLE IF NOT EXISTS counters (
+            name TEXT,
+            value COUNTER,
+            PRIMARY KEY (name)
+        )
+    """)
+    
+    # Initialize counters if they don't exist
+    try:
+        session.execute("UPDATE counters SET value = value + 0 WHERE name = 'message_id'")
+        session.execute("UPDATE counters SET value = value + 0 WHERE name = 'conversation_id'")
+    except Exception as e:
+        logger.warning(f"Counter initialization warning: {str(e)}")
     
     logger.info("Tables created successfully.")
 
@@ -87,4 +146,4 @@ def main():
             cluster.shutdown()
 
 if __name__ == "__main__":
-    main() 
+    main()
